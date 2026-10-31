@@ -126,7 +126,11 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
         center.pauseCommand.addTarget { [weak self] _ in self?.audio?.pause(); self?.notifyState(false); return .success }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let p = self?.audio else { return .commandFailed }
-            p.isPlaying ? p.pause() : p.play()
+            if p.isPlaying {
+    p.pause()
+} else {
+    _ = p.play()
+}
             self?.notifyState(p.isPlaying); return .success
         }
         center.nextTrackCommand.addTarget { [weak self] _ in self?.notifyListeners("remoteNext", data: [:], retainUntilConsumed: false); return .success }
