@@ -1,0 +1,8 @@
+﻿{
+  "appId": "com.twk.musicplayer",
+  "appName": "TWK Music",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "automatic"
+  }
+}
