@@ -3,12 +3,20 @@ import './style.css';
 
 const MusicPlayer = registerPlugin('MusicPlayer');
 const $ = (id) => document.getElementById(id);
-let tracks = [];
+const STORAGE_KEY = 'twk_music_library_v1';
+const FAVORITES_KEY = 'twk_music_favorites_v1';
+function loadJSON(key, fallback) {
+  try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
+  catch { return fallback; }
+}
+let tracks = loadJSON(STORAGE_KEY, []);
 let current = -1;
 let isPlaying = false;
 let isShuffle = false;
 let repeat = false;
-let favorites = new Set();
+let favorites = new Set(loadJSON(FAVORITES_KEY, []));
+function saveLibrary() { localStorage.setItem(STORAGE_KEY, JSON.stringify(tracks)); }
+function saveFavorites() { localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites])); }
 
 const fmt = (s=0) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 function render() {
@@ -30,6 +38,7 @@ async function chooseFiles() {
     for (const item of (result.files || [])) {
       if (!tracks.some(t=>t.id===item.id)) tracks.push(item);
     }
+    saveLibrary();
     render();
     if (current < 0 && tracks.length) playTrack(0);
   } catch(e) { alert(e?.message || 'Could not open the Files picker.'); }
@@ -54,7 +63,7 @@ $('previous').onclick = () => playTrack(current<=0 ? tracks.length-1 : current-1
 $('next').onclick = () => playTrack(current+1);
 $('shuffle').onclick = () => { isShuffle=!isShuffle; $('shuffle').classList.toggle('selected',isShuffle); };
 $('repeat').onclick = () => { repeat=!repeat; $('repeat').classList.toggle('selected',repeat); };
-$('favorite').onclick = () => { if(current>=0){ const id=tracks[current].id; favorites.has(id)?favorites.delete(id):favorites.add(id); render(); } };
+$('favorite').onclick = () => { if(current>=0){ const id=tracks[current].id; favorites.has(id)?favorites.delete(id):favorites.add(id); saveFavorites(); render(); } };
 $('tracks').onclick = (e) => { const li=e.target.closest('[data-index]'); if(li) playTrack(Number(li.dataset.index)); };
 MusicPlayer.addListener('playbackState', state => { isPlaying=!!state.playing; render(); });
 MusicPlayer.addListener('playbackProgress', state => {

@@ -64,8 +64,26 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
     }
 
     @objc func play(_ call: CAPPluginCall) {
-        guard let id = call.getString("id"), let url = fileMap[id] else {
-            call.reject("Audio file not found. Please add the file again."); return
+        guard let id = call.getString("id") else {
+            call.reject("Audio file ID is missing."); return
+        }
+        // Rebuild the in-memory map after an app restart. Imported audio files
+        // are copied into Documents/Music and remain there between launches.
+        let musicFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Music", isDirectory: true)
+        let url: URL
+        if let cachedURL = fileMap[id], FileManager.default.fileExists(atPath: cachedURL.path) {
+            url = cachedURL
+        } else {
+            let prefix = id + "-"
+            guard let files = try? FileManager.default.contentsOfDirectory(
+                at: musicFolder, includingPropertiesForKeys: nil
+            ), let recovered = files.first(where: { $0.lastPathComponent.hasPrefix(prefix) }) else {
+                call.reject("Audio file not found. Please add the file again.")
+                return
+            }
+            url = recovered
+            fileMap[id] = recovered
         }
         do {
             try AVAudioSession.sharedInstance().setActive(true)
@@ -108,11 +126,7 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
         center.pauseCommand.addTarget { [weak self] _ in self?.audio?.pause(); self?.notifyState(false); return .success }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let p = self?.audio else { return .commandFailed }
-            if p.isPlaying {
-    p.pause()
-} else {
-    _ = p.play()
-}
+            p.isPlaying ? p.pause() : p.play()
             self?.notifyState(p.isPlaying); return .success
         }
         center.nextTrackCommand.addTarget { [weak self] _ in self?.notifyListeners("remoteNext", data: [:], retainUntilConsumed: false); return .success }
