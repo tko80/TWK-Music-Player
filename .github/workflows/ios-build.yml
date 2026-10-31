@@ -1,4 +1,4 @@
-name: Build iOS IPA
+﻿name: Build iOS IPA
 on:
   workflow_dispatch:
   push:
@@ -28,7 +28,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" ios/App/App/Info.plist 2>/dev/null || true
       - name: Build unsigned app
         run: |
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
@@ -40,3 +40,4 @@ jobs:
           name: TWK-Music-unsigned-IPA
           path: TWK-Music-unsigned.ipa
           if-no-files-found: error
+
