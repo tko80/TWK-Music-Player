@@ -18,7 +18,12 @@ let favorites = new Set(loadJSON(FAVORITES_KEY, []));
 function saveLibrary() { localStorage.setItem(STORAGE_KEY, JSON.stringify(tracks)); }
 function saveFavorites() { localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites])); }
 
-const fmt = (s=0) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+const fmt = (seconds=0) => {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return '0:00';
+  const whole = Math.floor(value);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2,'0')}`;
+};
 function render() {
   $('trackCount').textContent = `${tracks.length} ${tracks.length===1?'song':'songs'}`;
   $('empty').hidden = tracks.length > 0;
@@ -47,8 +52,13 @@ async function playTrack(index) {
   if (!tracks.length) return;
   current = (index + tracks.length) % tracks.length;
   try {
-    await MusicPlayer.play({id:tracks[current].id, title:tracks[current].name});
-    isPlaying = true; render();
+    const playback = await MusicPlayer.play({id:tracks[current].id, title:tracks[current].name});
+    isPlaying = true;
+    updateProgress({
+      currentTime: Number(playback?.currentTime) || 0,
+      duration: Number(playback?.duration) || 0
+    });
+    render();
   } catch(e) { isPlaying=false; alert(e?.message || 'Unable to play this audio file.'); render(); }
 }
 async function togglePlay() {
@@ -66,11 +76,38 @@ $('repeat').onclick = () => { repeat=!repeat; $('repeat').classList.toggle('sele
 $('favorite').onclick = () => { if(current>=0){ const id=tracks[current].id; favorites.has(id)?favorites.delete(id):favorites.add(id); saveFavorites(); render(); } };
 $('tracks').onclick = (e) => { const li=e.target.closest('[data-index]'); if(li) playTrack(Number(li.dataset.index)); };
 MusicPlayer.addListener('playbackState', state => { isPlaying=!!state.playing; render(); });
-MusicPlayer.addListener('playbackProgress', state => {
-  $('elapsed').textContent=fmt(state.currentTime); $('duration').textContent=fmt(state.duration);
-  $('seek').value=state.duration ? Math.round(state.currentTime/state.duration*1000) : 0;
-});
-$('seek').onchange = async () => { if(current>=0) await MusicPlayer.seek({fraction:Number($('seek').value)/1000}); };
+let playbackDuration = 0;
+let isSeeking = false;
+function updateProgress(state = {}) {
+  const currentTime = Math.max(0, Number(state.currentTime) || 0);
+  const duration = Math.max(0, Number(state.duration) || 0);
+  if (duration > 0) playbackDuration = duration;
+  $('elapsed').textContent = fmt(currentTime);
+  $('duration').textContent = fmt(duration || playbackDuration);
+  if (!isSeeking) {
+    $('seek').value = duration > 0
+      ? String(Math.max(0, Math.min(1000, Math.round(currentTime / duration * 1000))))
+      : '0';
+  }
+}
+MusicPlayer.addListener('playbackProgress', updateProgress);
+$('seek').onpointerdown = () => { isSeeking = true; };
+$('seek').oninput = () => {
+  const previewTime = playbackDuration * Number($('seek').value) / 1000;
+  $('elapsed').textContent = fmt(previewTime);
+};
+async function finishSeeking() {
+  if (!isSeeking) return;
+  isSeeking = false;
+  if (current >= 0 && playbackDuration > 0) {
+    const fraction = Number($('seek').value) / 1000;
+    await MusicPlayer.seek({fraction});
+    updateProgress({currentTime: playbackDuration * fraction, duration: playbackDuration});
+  }
+}
+$('seek').onchange = finishSeeking;
+$('seek').onpointerup = finishSeeking;
+$('seek').ontouchend = finishSeeking;
 MusicPlayer.addListener('remoteNext', () => playTrack(current+1));
 MusicPlayer.addListener('remotePrevious', () => playTrack(current<=0?tracks.length-1:current-1));
 MusicPlayer.addListener('remotePlayPause', togglePlay);

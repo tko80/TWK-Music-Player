@@ -94,7 +94,16 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
             updateNowPlaying(title: call.getString("title") ?? url.deletingPathExtension().lastPathComponent)
             startProgress()
             notifyState(true)
-            call.resolve()
+            if let player = audio {
+                let progress: [String: Any] = [
+                    "currentTime": player.currentTime,
+                    "duration": player.duration
+                ]
+                notifyListeners("playbackProgress", data: progress, retainUntilConsumed: false)
+                call.resolve(progress)
+            } else {
+                call.resolve(["currentTime": 0, "duration": 0])
+            }
         } catch { call.reject("Cannot play this audio file: \(error.localizedDescription)") }
     }
 
@@ -107,7 +116,18 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
     }
     @objc func seek(_ call: CAPPluginCall) {
         let fraction = max(0, min(1, call.getFloat("fraction") ?? 0))
-        if let player = audio { player.currentTime = player.duration * Double(fraction) }
+        if let player = audio {
+            player.currentTime = player.duration * Double(fraction)
+            notifyListeners(
+                "playbackProgress",
+                data: ["currentTime": player.currentTime, "duration": player.duration],
+                retainUntilConsumed: false
+            )
+            if var info = MPNowPlayingInfoCenter.default().nowPlayingInfo {
+                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            }
+        }
         call.resolve()
     }
 
@@ -146,9 +166,26 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
     }
     private func startProgress() {
         progressTimer?.invalidate()
-        progressTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let p = self?.audio else { return }
-            self?.notifyListeners("playbackProgress", data: ["currentTime": p.currentTime, "duration": p.duration], retainUntilConsumed: false)
+        let publish: (AVAudioPlayer) -> Void = { [weak self] player in
+            let currentTime = player.currentTime
+            let duration = player.duration
+            self?.notifyListeners(
+                "playbackProgress",
+                data: ["currentTime": currentTime, "duration": duration],
+                retainUntilConsumed: false
+            )
+            if var info = MPNowPlayingInfoCenter.default().nowPlayingInfo {
+                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+                info[MPNowPlayingInfoPropertyPlaybackRate] = player.isPlaying ? 1.0 : 0.0
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            }
+        }
+        if let player = audio { publish(player) }
+        DispatchQueue.main.async { [weak self] in
+            self?.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+                guard let player = self?.audio else { return }
+                publish(player)
+            }
         }
     }
 }
