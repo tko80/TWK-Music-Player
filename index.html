@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -9,22 +10,75 @@
 <body>
   <div id="app">
     <header class="topbar">
-      <div class="brand"><div class="brand-icon">♫</div><div><b>TWK Music</b><small>YOUR MUSIC, YOUR WAY</small></div></div>
+      <div class="brand">
+        <div class="brand-icon">♫</div>
+        <div>
+          <b>TWK Music</b>
+          <small>YOUR MUSIC, YOUR WAY</small>
+        </div>
+      </div>
       <button id="addMusic" class="icon-btn" aria-label="Add music">＋</button>
     </header>
+
     <main>
-      <section class="welcome"><span class="eyebrow">YOUR LIBRARY</span><h1>Feel every<br><em>moment.</em></h1><p>Play music stored in your iPhone Files.</p></section>
-      <section class="library-head"><div><h2>Recently added</h2><span id="trackCount">0 songs</span></div><button id="browse" class="outline-btn">＋ Add songs</button></section>
-      <div id="empty" class="empty"><div class="empty-note">♫</div><b>Your library is waiting</b><p>Add MP3, M4A or WAV files from the Files app.</p><button id="emptyAdd" class="primary-btn">Choose music files</button></div>
+      <section class="welcome">
+        <span class="eyebrow">YOUR LIBRARY</span>
+        <h1>Feel every<br><em>moment.</em></h1>
+        <p>Play music from your iPhone Files and Music Library.</p>
+      </section>
+
+      <section class="library-head">
+        <div>
+          <h2>Recently added</h2>
+          <span id="trackCount">0 songs</span>
+        </div>
+      </section>
+
+      <section class="library-actions">
+        <button id="browse" class="outline-btn">＋ Add songs</button>
+        <button id="nativeLibrary" class="outline-btn">♫ iPhone Music</button>
+      </section>
+
+      <div id="empty" class="empty">
+        <div class="empty-note">♫</div>
+        <b>Your library is waiting</b>
+        <p>Add audio files or import songs from your iPhone Music Library.</p>
+        <button id="emptyAdd" class="primary-btn">Choose music files</button>
+      </div>
+
       <ul id="tracks" class="tracks"></ul>
     </main>
+
     <footer class="player" id="player">
-      <div class="now-playing"><div class="cover">♫</div><div class="track-meta"><b id="songTitle">Nothing playing</b><small id="songSub">Choose a song to begin</small></div><button id="favorite" class="heart">♡</button></div>
-      <div class="progress-wrap"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="duration">0:00</span></div>
-      <div class="controls"><button id="shuffle" class="small-control">⤨</button><button id="previous" class="control">Ⅱ</button><button id="play" class="play-btn">▶</button><button id="next" class="control">Ⅱ</button><button id="repeat" class="small-control">↻</button></div>
-      <div class="player-hint">Background playback & Lock Screen controls supported on iPhone</div>
+      <div class="now-playing">
+        <div class="cover">♫</div>
+        <div class="track-meta">
+          <b id="songTitle">Nothing playing</b>
+          <small id="songSub">Choose a song to begin</small>
+        </div>
+        <button id="favorite" class="heart">♡</button>
+      </div>
+
+      <div class="progress-wrap">
+        <span id="elapsed">0:00</span>
+        <input id="seek" type="range" min="0" max="1000" value="0">
+        <span id="duration">0:00</span>
+      </div>
+
+      <div class="controls">
+        <button id="shuffle" class="small-control">⤨</button>
+        <button id="previous" class="control">Ⅱ</button>
+        <button id="play" class="play-btn">▶</button>
+        <button id="next" class="control">Ⅱ</button>
+        <button id="repeat" class="small-control">↻</button>
+      </div>
+
+      <div class="player-hint">
+        Background playback & Lock Screen controls supported on iPhone
+      </div>
     </footer>
   </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
