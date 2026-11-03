@@ -1,0 +1,21 @@
+{
+  "name": "TWK Gallery",
+  "short_name": "Gallery",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#090b12",
+  "theme_color": "#090b12",
+  "description": "A private photo and video gallery on your iPhone",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
