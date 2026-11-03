@@ -258,3 +258,5 @@
     padding-right: 16px;
   }
 }
+/* Hide top music navigation tabs */
+.music-tabs { display: none !important; }
