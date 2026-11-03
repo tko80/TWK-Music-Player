@@ -275,7 +275,7 @@ function render() {
         aria-label="Select ${escapeHtml(t.name)}"
         ${selectedTracks.has(t.id) ? 'checked' : ''}>
 
-      <div class="track-art">♫</div>
+      <div class="track-art">&#9835;</div>
 
       <div class="track-info">
         <b>${escapeHtml(t.name)}</b>
@@ -286,7 +286,7 @@ function render() {
       </div>
 
       <button class="row-play" aria-label="Play">
-        ${i === current && isPlaying ? 'Ⅱ' : '▶'}
+        ${i === current && isPlaying ? '&#9208;' : '&#9654;'}
       </button>
     </li>
   `).join('');
@@ -301,10 +301,10 @@ function render() {
 
   $('favorite').textContent =
     current >= 0 && favorites.has(tracks[current].id)
-      ? '♥'
-      : '♡';
+      ? '\u2665'
+      : '\u2661';
 
-  $('play').textContent = isPlaying ? 'Ⅱ' : '▶';
+  $('play').textContent = isPlaying ? '\u23F8' : '\u25B6';
 
   if (activeTab === 'playlists') {
     showPlaylistTools();
@@ -519,63 +519,6 @@ async function loadIPhoneMusic() {
   }
 }
 
-async function playTrack(index) {
-  if (!tracks.length) return;
-
-  current = (index + tracks.length) % tracks.length;
-
-  const track = tracks[current];
-
-  try {
-    if (isNative) {
-      const playback = await MusicPlayer.play({
-        id: track.id,
-        title: track.name
-      });
-
-      isPlaying = true;
-      playbackDuration = Number(playback.duration) || 0;
-
-      render();
-      return;
-    }
-
-    if (!track.webUrl) {
-      showMessage(
-        'Please add this audio file again. Browser file access does not persist after reloading.'
-      );
-      return;
-    }
-
-    if (audio) {
-      audio.pause();
-      audio.onended = null;
-    }
-
-    audio = new Audio(track.webUrl);
-
-    audio.onended = handleEnded;
-
-    audio.ontimeupdate = () => {
-      updateProgress({
-        currentTime: audio.currentTime,
-        duration: audio.duration
-      });
-    };
-
-    await audio.play();
-
-    isPlaying = true;
-    playbackDuration = audio.duration || 0;
-
-    render();
-
-  } catch (e) {
-    isPlaying = false;
-    showMessage(e?.message || 'Unable to play this audio file.');
-    render();
-  }
-}
 async function playTrack(index) {
   if (!tracks.length) return;
 
