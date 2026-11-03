@@ -94,6 +94,63 @@ function showMessage(message, title = 'TWK Music') {
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 }
 
+function showConfirm(title, message) {
+  ensureDialogStyles();
+  return new Promise(resolve => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'twk-dialog-backdrop';
+    backdrop.innerHTML = `<section class="twk-dialog" role="alertdialog" aria-modal="true"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(message)}</p><div class="twk-dialog-actions"><button type="button" class="twk-dialog-cancel">Cancel</button><button type="button" class="twk-dialog-primary">Delete</button></div></section>`;
+    document.body.appendChild(backdrop);
+    const finish = value => { backdrop.remove(); resolve(value); };
+    backdrop.querySelector('.twk-dialog-cancel').addEventListener('click', () => finish(false));
+    backdrop.querySelector('.twk-dialog-primary').addEventListener('click', () => finish(true));
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) finish(false); });
+  });
+}
+
+async function deleteLibraryTrack(index) {
+  const track = tracks[index];
+  if (!track) return;
+
+  const confirmed = await showConfirm(
+    'Delete song?',
+    `Remove “${track.name}” from your TWK Music library? This also removes it from Favorites and Playlists.`
+  );
+  if (!confirmed) return;
+
+  if (track.webUrl) URL.revokeObjectURL(track.webUrl);
+
+  if (index === current) {
+    if (isNative) {
+      try { await MusicPlayer.pause(); } catch (_) {}
+    }
+    if (audio) {
+      audio.pause();
+      audio.onended = null;
+      audio = null;
+    }
+    current = -1;
+    isPlaying = false;
+    playbackDuration = 0;
+    updateProgress({ currentTime: 0, duration: 0 });
+  } else if (index < current) {
+    current--;
+  }
+
+  tracks.splice(index, 1);
+  favorites.delete(track.id);
+  selectedTracks.delete(track.id);
+  playlists.forEach(playlist => {
+    playlist.trackIds = playlist.trackIds.filter(id => id !== track.id);
+  });
+
+  saveLibrary();
+  saveFavorites();
+  savePlaylists();
+  render();
+  showMessage('Song removed from your TWK Music library. The original file in Files or iPhone Music is not deleted.');
+}
+
 function showPrompt(title, message, initialValue = '') {
   ensureDialogStyles();
   return new Promise(resolve => {
@@ -189,7 +246,7 @@ function createTabs() {
   tabs.dataset.twkTabsBound = 'true';
 
   const getTabName = button => {
-    if (button.dataset.tab) return button.dataset.tab;
+    if (button.dataset.tab || button.dataset.view) return button.dataset.tab || button.dataset.view;
     const label = button.textContent.trim().toLowerCase();
     if (label.includes('favorite')) return 'favorites';
     if (label.includes('playlist')) return 'playlists';
@@ -205,7 +262,6 @@ function createTabs() {
 
     activeTab = tabName;
     activePlaylist = null;
-    selectedTracks.clear();
     tabs.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === button));
     render();
   });
@@ -272,7 +328,7 @@ function render() {
   if (visibleTabs) {
     visibleTabs.querySelectorAll('button').forEach(button => {
       const label = button.textContent.trim().toLowerCase();
-      const name = button.dataset.tab || (label.includes('favorite') ? 'favorites' : label.includes('playlist') ? 'playlists' : 'all');
+      const name = button.dataset.tab || button.dataset.view || (label.includes('favorite') ? 'favorites' : label.includes('playlist') ? 'playlists' : 'all');
       button.classList.toggle('active', name === activeTab);
     });
   }
@@ -306,6 +362,7 @@ function render() {
       <button class="row-play" aria-label="Play">
         ${i === current && isPlaying ? 'Ⅱ' : '▶'}
       </button>
+      <button class="delete-track" type="button" data-delete-track="${i}" aria-label="Delete ${escapeHtml(t.name)}" title="Remove from library">✕</button>
     </li>
   `).join('');
 
@@ -332,122 +389,95 @@ function render() {
 }
 
 function showPlaylistTools() {
-  const head = document.querySelector('.library-head');
-  if (!head) return;
+  const panel = $('playlistPanel');
+  const list = $('playlistList');
+  const createButton = $('newPlaylist');
+  if (!panel || !list || !createButton) return;
 
-  let tools = document.getElementById('playlistTools');
+  panel.hidden = false;
+  createButton.onclick = createPlaylist;
 
-  if (!tools) {
-    tools = document.createElement('div');
-    tools.id = 'playlistTools';
-    tools.className = 'playlist-tools';
-
-    head.insertAdjacentElement('afterend', tools);
-  }
-
-  tools.innerHTML = `
-    <button id="newPlaylist" class="outline-btn">
-      ＋ New Playlist
-    </button>
-
-    <select id="playlistSelect" aria-label="Select playlist">
-      <option value="">Select playlist</option>
-      ${playlists.map(p => `
-        <option value="${escapeHtml(p.id)}">
-          ${escapeHtml(p.name)}
-        </option>
-      `).join('')}
-    </select>
-
-    <button id="addSelected" class="outline-btn">
-      Add Selected (${selectedTracks.size})
-    </button>
-
-    <button id="addToPlaylist" class="outline-btn">
-      Add Current Song
-    </button>
-
-    <button id="removeSelected" class="outline-btn">
-      Remove Selected
-    </button>
+  const selectedPlaylist = playlists.find(p => p.id === activePlaylist);
+  list.innerHTML = `
+    <div class="playlist-items">
+      ${playlists.length ? playlists.map(p => `
+        <button type="button"
+          class="outline-btn playlist-item ${p.id === activePlaylist ? 'active' : ''}"
+          data-open-playlist="${escapeHtml(p.id)}">
+          ${escapeHtml(p.name)} <span>${p.trackIds.length} songs</span>
+        </button>
+      `).join('') : '<p class="empty-playlists">No playlists yet. Create your first playlist.</p>'}
+    </div>
+    ${selectedPlaylist ? `
+      <div class="playlist-detail">
+        <p>${escapeHtml(selectedPlaylist.name)} · ${selectedPlaylist.trackIds.length} songs</p>
+        <div class="playlist-tools">
+          <button type="button" id="addSelected" class="outline-btn">Add Selected (${selectedTracks.size})</button>
+          <button type="button" id="addToPlaylist" class="outline-btn">Add Current Song</button>
+          <button type="button" id="removeSelected" class="outline-btn">Remove Selected</button>
+        </div>
+      </div>
+    ` : ''}
   `;
 
-  $('newPlaylist').onclick = createPlaylist;
+  list.querySelectorAll('[data-open-playlist]').forEach(button => {
+    button.addEventListener('click', () => {
+      activePlaylist = button.dataset.openPlaylist;
+      selectedTracks.clear();
+      render();
+    });
+  });
 
-  $('addToPlaylist').onclick = addCurrentToPlaylist;
+  if (!selectedPlaylist) return;
 
-  $('playlistSelect').onchange = e => {
-    activePlaylist = e.target.value || null;
-    selectedTracks.clear();
-    render();
+  $('addToPlaylist').onclick = async () => {
+    if (current < 0) {
+      showMessage('Choose a song first.');
+      return;
+    }
+    if (!selectedPlaylist.trackIds.includes(tracks[current].id)) {
+      selectedPlaylist.trackIds.push(tracks[current].id);
+      savePlaylists();
+      render();
+      showMessage('Added to playlist.');
+    } else {
+      showMessage('This song is already in the playlist.');
+    }
   };
 
   $('addSelected').onclick = () => {
-    const playlist = playlists.find(
-      p => p.id === activePlaylist
-    );
-
-    if (!playlist) {
-      showMessage('Please select a playlist first.');
-      return;
-    }
-
     if (!selectedTracks.size) {
       showMessage('Select one or more songs first.');
       return;
     }
-
     let added = 0;
-
     for (const id of selectedTracks) {
-      if (
-        tracks.some(t => t.id === id) &&
-        !playlist.trackIds.includes(id)
-      ) {
-        playlist.trackIds.push(id);
+      if (tracks.some(t => t.id === id) && !selectedPlaylist.trackIds.includes(id)) {
+        selectedPlaylist.trackIds.push(id);
         added++;
       }
     }
-
     savePlaylists();
     selectedTracks.clear();
     render();
-
-    showMessage(`Added ${added} songs to ${playlist.name}.`);
+    showMessage(`Added ${added} songs to ${selectedPlaylist.name}.`);
   };
 
   $('removeSelected').onclick = () => {
-    const playlist = playlists.find(
-      p => p.id === activePlaylist
-    );
-
-    if (!playlist) {
-      showMessage('Please select a playlist first.');
-      return;
-    }
-
     if (!selectedTracks.size) {
       showMessage('Select songs to remove first.');
       return;
     }
-
-    playlist.trackIds = playlist.trackIds.filter(
-      id => !selectedTracks.has(id)
-    );
-
+    selectedPlaylist.trackIds = selectedPlaylist.trackIds.filter(id => !selectedTracks.has(id));
     selectedTracks.clear();
-
     savePlaylists();
     render();
   };
-
-  if (activePlaylist) {
-    $('playlistSelect').value = activePlaylist;
-  }
 }
 
 function removePlaylistTools() {
-  document.getElementById('playlistTools')?.remove();
+  const panel = $('playlistPanel');
+  if (panel) panel.hidden = true;
 }
 
 async function chooseFiles() {
@@ -775,6 +805,14 @@ $('favorite').onclick = () => {
 };
 
 $('tracks').onclick = e => {
+  const deleteButton = e.target.closest('[data-delete-track]');
+  if (deleteButton) {
+    e.preventDefault();
+    e.stopPropagation();
+    deleteLibraryTrack(Number(deleteButton.dataset.deleteTrack));
+    return;
+  }
+
   const checkbox = e.target.closest('[data-select]');
 
   if (checkbox) {
@@ -803,7 +841,14 @@ $('tracks').onclick = e => {
   const li = e.target.closest('[data-index]');
 
   if (li) {
-    playTrack(Number(li.dataset.index));
+    const index = Number(li.dataset.index);
+    if (Number.isInteger(index) && index >= 0) {
+      if (index === current) {
+        togglePlay();
+      } else {
+        playTrack(index);
+      }
+    }
   }
 };
 
