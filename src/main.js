@@ -63,6 +63,54 @@ function escapeHtml(value = '') {
   })[c]);
 }
 
+// TWK Music in-app dialogs (no browser-native "says" popups).
+function ensureDialogStyles() {
+  if (document.getElementById('twkDialogStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'twkDialogStyles';
+  style.textContent = `
+    .twk-dialog-backdrop{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}
+    .twk-dialog{width:min(100%,390px);padding:23px;border:1px solid rgba(255,255,255,.14);border-radius:22px;background:#1b1a2b;color:#f6f7fb;box-shadow:0 24px 70px #000a}
+    .twk-dialog h3{margin:0 0 9px;font-size:19px}
+    .twk-dialog p{margin:0 0 17px;color:#aaaabd;font-size:13px;line-height:1.55;white-space:pre-line}
+    .twk-dialog input{width:100%;padding:13px 14px;margin:0 0 18px;border:1px solid #ffffff2b;border-radius:12px;outline:none;background:#10101b;color:white;font:inherit}
+    .twk-dialog input:focus{border-color:#a58bff}
+    .twk-dialog-actions{display:flex;justify-content:flex-end;gap:9px}
+    .twk-dialog-actions button{padding:11px 17px;border-radius:22px;background:#ffffff12;color:white;font-weight:600}
+    .twk-dialog-actions .twk-dialog-primary{background:#9275ff;color:#15121e}
+  `;
+  document.head.appendChild(style);
+}
+
+function showMessage(message, title = 'TWK Music') {
+  ensureDialogStyles();
+  const backdrop = document.createElement('div');
+  backdrop.className = 'twk-dialog-backdrop';
+  backdrop.innerHTML = `<section class="twk-dialog" role="alertdialog" aria-modal="true"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(message)}</p><div class="twk-dialog-actions"><button type="button" class="twk-dialog-primary">OK</button></div></section>`;
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.querySelector('button').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+}
+
+function showPrompt(title, message, initialValue = '') {
+  ensureDialogStyles();
+  return new Promise(resolve => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'twk-dialog-backdrop';
+    backdrop.innerHTML = `<form class="twk-dialog" role="dialog" aria-modal="true"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(message)}</p><input type="text" autocomplete="off" value="${escapeHtml(initialValue)}"><div class="twk-dialog-actions"><button type="button" class="twk-dialog-cancel">Cancel</button><button type="submit" class="twk-dialog-primary">Save</button></div></form>`;
+    document.body.appendChild(backdrop);
+    const form = backdrop.querySelector('form');
+    const input = form.querySelector('input');
+    const finish = value => { backdrop.remove(); resolve(value); };
+    form.addEventListener('submit', e => { e.preventDefault(); finish(input.value); });
+    form.querySelector('.twk-dialog-cancel').addEventListener('click', () => finish(null));
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) finish(null); });
+    input.focus();
+    input.select();
+  });
+}
+
 function getVisibleTracks() {
   if (activeTab === 'favorites') {
     return tracks.map((t, i) => ({ t, i }))
@@ -129,7 +177,6 @@ function createTabs() {
 
   tabs.id = 'musicTabs';
   tabs.className = 'music-tabs';
-
   tabs.innerHTML = `
     <button data-tab="all" class="active">All Songs</button>
     <button data-tab="favorites">Favorites</button>
@@ -154,8 +201,8 @@ function createTabs() {
   });
 }
 
-function createPlaylist() {
-  const name = prompt('Enter playlist name:');
+async function createPlaylist() {
+  const name = await showPrompt('Create playlist', 'Enter playlist name');
 
   if (!name || !name.trim()) return;
 
@@ -175,14 +222,14 @@ function createPlaylist() {
   render();
 }
 
-function addCurrentToPlaylist() {
+async function addCurrentToPlaylist() {
   if (current < 0) {
-    alert('Choose a song first.');
+    showMessage('Choose a song first.');
     return;
   }
 
   if (!playlists.length) {
-    createPlaylist();
+    await createPlaylist();
     if (!playlists.length) return;
   }
 
@@ -190,7 +237,7 @@ function addCurrentToPlaylist() {
     .map((p, i) => `${i + 1}. ${p.name}`)
     .join('\n');
 
-  const choice = prompt(`Choose playlist number:\n${names}`);
+  const choice = await showPrompt('Add to playlist', `Choose playlist number:\n${names}`);
 
   if (choice === null) return;
 
@@ -203,9 +250,9 @@ function addCurrentToPlaylist() {
   if (!playlists[index].trackIds.includes(id)) {
     playlists[index].trackIds.push(id);
     savePlaylists();
-    alert('Added to playlist.');
+    showMessage('Added to playlist.');
   } else {
-    alert('This song is already in the playlist.');
+    showMessage('This song is already in the playlist.');
   }
 }
 
@@ -308,7 +355,6 @@ function showPlaylistTools() {
   `;
 
   $('newPlaylist').onclick = createPlaylist;
-
   $('addToPlaylist').onclick = addCurrentToPlaylist;
 
   $('playlistSelect').onchange = e => {
@@ -323,12 +369,12 @@ function showPlaylistTools() {
     );
 
     if (!playlist) {
-      alert('Please select a playlist first.');
+      showMessage('Please select a playlist first.');
       return;
     }
 
     if (!selectedTracks.size) {
-      alert('Select one or more songs first.');
+      showMessage('Select one or more songs first.');
       return;
     }
 
@@ -348,7 +394,7 @@ function showPlaylistTools() {
     selectedTracks.clear();
     render();
 
-    alert(`Added ${added} songs to ${playlist.name}.`);
+    showMessage(`Added ${added} songs to ${playlist.name}.`);
   };
 
   $('removeSelected').onclick = () => {
@@ -357,12 +403,12 @@ function showPlaylistTools() {
     );
 
     if (!playlist) {
-      alert('Please select a playlist first.');
+      showMessage('Please select a playlist first.');
       return;
     }
 
     if (!selectedTracks.size) {
-      alert('Select songs to remove first.');
+      showMessage('Select songs to remove first.');
       return;
     }
 
@@ -403,7 +449,7 @@ async function chooseFiles() {
         await playTrack(0);
       }
     } catch (e) {
-      alert(e?.message || 'Could not open Files picker.');
+      showMessage(e?.message || 'Could not open Files picker.');
     }
 
     return;
@@ -436,7 +482,7 @@ async function chooseFiles() {
 
 async function loadIPhoneMusic() {
   if (!isNative) {
-    alert('iPhone Music Library is available in the iPhone app only.');
+    showMessage('iPhone Music Library is available in the iPhone app only.');
     return;
   }
 
@@ -460,7 +506,7 @@ async function loadIPhoneMusic() {
     saveLibrary();
     render();
 
-    alert(
+    showMessage(
       added
         ? `Added ${added} songs from your iPhone Music Library.`
         : imported.length
@@ -469,10 +515,67 @@ async function loadIPhoneMusic() {
     );
 
   } catch (e) {
-    alert(e?.message || 'Could not access your iPhone Music Library.');
+    showMessage(e?.message || 'Could not access your iPhone Music Library.');
   }
 }
 
+async function playTrack(index) {
+  if (!tracks.length) return;
+
+  current = (index + tracks.length) % tracks.length;
+
+  const track = tracks[current];
+
+  try {
+    if (isNative) {
+      const playback = await MusicPlayer.play({
+        id: track.id,
+        title: track.name
+      });
+
+      isPlaying = true;
+      playbackDuration = Number(playback.duration) || 0;
+
+      render();
+      return;
+    }
+
+    if (!track.webUrl) {
+      showMessage(
+        'Please add this audio file again. Browser file access does not persist after reloading.'
+      );
+      return;
+    }
+
+    if (audio) {
+      audio.pause();
+      audio.onended = null;
+    }
+
+    audio = new Audio(track.webUrl);
+
+    audio.onended = handleEnded;
+
+    audio.ontimeupdate = () => {
+      updateProgress({
+        currentTime: audio.currentTime,
+        duration: audio.duration
+      });
+    };
+
+    await audio.play();
+
+    isPlaying = true;
+    playbackDuration = audio.duration || 0;
+
+    render();
+
+  } catch (e) {
+    isPlaying = false;
+    showMessage(e?.message || 'Unable to play this audio file.');
+    render();
+  }
+}
 async function playTrack(index) {
   if (!tracks.length) return;
 
@@ -496,7 +599,7 @@ async function playTrack(index) {
 
     } else {
       if (!track.webUrl) {
-        alert(
+        showMessage(
           'Please add this audio file again. Browser file access does not persist after reloading.'
         );
         return;
@@ -527,7 +630,7 @@ async function playTrack(index) {
 
   } catch (e) {
     isPlaying = false;
-    alert(e?.message || 'Unable to play this audio file.');
+    showMessage(e?.message || 'Unable to play this audio file.');
     render();
   }
 }
@@ -583,7 +686,7 @@ async function togglePlay() {
     render();
 
   } catch (e) {
-    alert(e?.message || 'Playback control failed.');
+    showMessage(e?.message || 'Playback control failed.');
   }
 }
 
@@ -634,7 +737,6 @@ async function finishSeeking() {
     audio.currentTime = playbackDuration * fraction;
   }
 }
-
 // Main buttons
 
 $('addMusic').onclick = chooseFiles;
@@ -776,4 +878,3 @@ if (isNative) {
 }
 
 createTabs();
-render();
