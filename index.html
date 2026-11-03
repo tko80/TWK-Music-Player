@@ -14,17 +14,16 @@
     </header>
     <main>
       <section class="welcome"><span class="eyebrow">YOUR LIBRARY</span><h1>Feel every<br><em>moment.</em></h1><p>Play music from your iPhone Music Library or Files.</p></section>
-      <section class="library-head"><div><h2>Your library</h2><span id="trackCount">0 songs</span></div><div class="library-actions"><button id="iphoneMusic" class="outline-btn">iPhone Music</button><button id="browse" class="outline-btn">＋ Add songs</button></div></section>
-      <nav class="library-tabs"><button class="tab active" data-filter="all">All songs</button><button class="tab" data-filter="favorites">♥ Favorites</button><button class="tab" data-filter="playlists">☷ Playlists</button></nav>
-      <section id="playlistPanel" class="playlist-panel" hidden><div class="playlist-heading"><h3>Your playlists</h3><button id="createPlaylist" class="outline-btn">＋ New playlist</button></div><div id="playlistList"></div></section>
+      <nav class="tabs" aria-label="Music sections"><button class="tab active" data-view="all">All Songs</button><button class="tab" data-view="favorites">Favorites</button><button class="tab" data-view="playlists">Playlists</button></nav><section class="library-head"><div><h2 id="sectionTitle">All Songs</h2><span id="trackCount">0 songs</span></div><div class="library-actions"><button id="iphoneMusic" class="outline-btn">iPhone Music</button><button id="browse" class="outline-btn">＋ Add songs</button></div></section>
       <div id="empty" class="empty"><div class="empty-note">♫</div><b>Your library is waiting</b><p>Add MP3, M4A or WAV files from the Files app.</p><button id="emptyAdd" class="primary-btn">Choose music files</button></div>
-      <ul id="tracks" class="tracks"></ul>
+      <div id="playlistTools" class="playlist-tools" hidden><button id="newPlaylist" class="outline-btn">＋ New Playlist</button><select id="playlistSelect" aria-label="Choose playlist"><option value="">Choose playlist</option></select><button id="addToPlaylist" class="outline-btn">Add current song</button></div><ul id="tracks" class="tracks"></ul>
     </main>
     <footer class="player" id="player">
+      <div class="player-grabber" id="playerGrabber" aria-label="Expand player"><span></span></div>
       <div class="now-playing"><div class="cover">♫</div><div class="track-meta"><b id="songTitle">Nothing playing</b><small id="songSub">Choose a song to begin</small></div><button id="favorite" class="heart">♡</button></div>
       <div class="progress-wrap"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="duration">0:00</span></div>
-      <div class="controls"><button id="shuffle" class="small-control">⤨</button><button id="previous" class="control" aria-label="Previous track">⏮</button><button id="play" class="play-btn">▶</button><button id="next" class="control" aria-label="Next track">⏭</button><button id="repeat" class="small-control">↻</button></div>
-      <div class="player-hint"><span id="playMode">PLAYING FROM YOUR LIBRARY</span><button id="addToPlaylist" class="text-btn">＋ Add to playlist</button></div>
+      <div class="controls"><button id="shuffle" class="small-control">⤨</button><button id="previous" class="control" aria-label="Previous">|◀</button><button id="play" class="play-btn">▶</button><button id="next" class="control" aria-label="Next">▶|</button><button id="repeat" class="small-control">↻</button></div>
+      <div class="player-hint">Background playback & Lock Screen controls supported on iPhone</div>
     </footer>
   </div>
   <script type="module" src="/src/main.js"></script>
