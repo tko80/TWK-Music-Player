@@ -169,36 +169,44 @@ function moveTrack(direction, wrap = true) {
 }
 
 function createTabs() {
-  if (document.getElementById('musicTabs')) return;
-
   const head = document.querySelector('.library-head');
-  if (!head) return;
+  let tabs = document.querySelector('.library-tabs') || document.getElementById('musicTabs');
 
-  const tabs = document.createElement('nav');
+  // Bind the visible tabs already present in index.html. Create a fallback only if absent.
+  if (!tabs && head) {
+    tabs = document.createElement('nav');
+    tabs.id = 'musicTabs';
+    tabs.className = 'music-tabs';
+    tabs.innerHTML = `
+      <button type="button" data-tab="all" class="active">All Songs</button>
+      <button type="button" data-tab="favorites">Favorites</button>
+      <button type="button" data-tab="playlists">Playlists</button>
+    `;
+    head.parentNode.insertBefore(tabs, head);
+  }
 
-  tabs.id = 'musicTabs';
-  tabs.className = 'music-tabs';
+  if (!tabs || tabs.dataset.twkTabsBound === 'true') return;
+  tabs.dataset.twkTabsBound = 'true';
 
-  tabs.innerHTML = `
-    <button data-tab="all" class="active">All Songs</button>
-    <button data-tab="favorites">Favorites</button>
-    <button data-tab="playlists">Playlists</button>
-  `;
-
-  head.parentNode.insertBefore(tabs, head);
+  const getTabName = button => {
+    if (button.dataset.tab) return button.dataset.tab;
+    const label = button.textContent.trim().toLowerCase();
+    if (label.includes('favorite')) return 'favorites';
+    if (label.includes('playlist')) return 'playlists';
+    if (label.includes('all song')) return 'all';
+    return null;
+  };
 
   tabs.addEventListener('click', e => {
-    const button = e.target.closest('[data-tab]');
-    if (!button) return;
+    const button = e.target.closest('button');
+    if (!button || !tabs.contains(button)) return;
+    const tabName = getTabName(button);
+    if (!tabName) return;
 
-    activeTab = button.dataset.tab;
+    activeTab = tabName;
     activePlaylist = null;
     selectedTracks.clear();
-
-    tabs.querySelectorAll('button').forEach(b => {
-      b.classList.toggle('active', b === button);
-    });
-
+    tabs.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === button));
     render();
   });
 }
@@ -260,6 +268,14 @@ async function addCurrentToPlaylist() {
 
 function render() {
   const visible = getVisibleTracks();
+  const visibleTabs = document.querySelector('.library-tabs') || document.getElementById('musicTabs');
+  if (visibleTabs) {
+    visibleTabs.querySelectorAll('button').forEach(button => {
+      const label = button.textContent.trim().toLowerCase();
+      const name = button.dataset.tab || (label.includes('favorite') ? 'favorites' : label.includes('playlist') ? 'playlists' : 'all');
+      button.classList.toggle('active', name === activeTab);
+    });
+  }
 
   $('trackCount').textContent =
     `${visible.length} ${visible.length === 1 ? 'song' : 'songs'}`;
