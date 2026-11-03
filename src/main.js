@@ -1,73 +1,473 @@
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, Capacitor } from '@capacitor/core';
 import './style.css';
 
 const MusicPlayer = registerPlugin('MusicPlayer');
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
+const isNative = Capacitor.isNativePlatform();
+
 const STORAGE_KEY = 'twk_music_library_v1';
 const FAVORITES_KEY = 'twk_music_favorites_v1';
+const PLAYLIST_KEY = 'twk_music_playlists_v1';
+
 function loadJSON(key, fallback) {
-  try { const value = JSON.parse(localStorage.getItem(key)); return value ?? fallback; }
-  catch { return fallback; }
+  try {
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
+
 let tracks = loadJSON(STORAGE_KEY, []);
+let favorites = new Set(loadJSON(FAVORITES_KEY, []));
+let playlists = loadJSON(PLAYLIST_KEY, []);
+
 let current = -1;
 let isPlaying = false;
 let isShuffle = false;
 let repeat = false;
-let favorites = new Set(loadJSON(FAVORITES_KEY, []));
-function saveLibrary() { localStorage.setItem(STORAGE_KEY, JSON.stringify(tracks)); }
-function saveFavorites() { localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites])); }
+let activeTab = 'all';
+let activePlaylist = null;
+let selectedTracks = new Set();
 
-const fmt = (seconds=0) => {
-  const value = Number(seconds);
-  if (!Number.isFinite(value) || value < 0) return '0:00';
-  const whole = Math.floor(value);
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2,'0')}`;
+let audio = null;
+let playbackDuration = 0;
+let isSeeking = false;
+
+function saveLibrary() {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(tracks.map(({ webUrl, ...track }) => track))
+  );
+}
+
+function saveFavorites() {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+}
+
+function savePlaylists() {
+  localStorage.setItem(PLAYLIST_KEY, JSON.stringify(playlists));
+}
+
+const fmt = seconds => {
+  const n = Math.max(0, Number(seconds) || 0);
+  return `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`;
 };
-function render() {
-  $('trackCount').textContent = `${tracks.length} ${tracks.length===1?'song':'songs'}`;
-  $('empty').hidden = tracks.length > 0;
-  $('tracks').innerHTML = tracks.map((t,i)=>`<li class="track ${i===current?'active':''}" data-index="${i}">
-    <div class="track-art">♫</div><div class="track-info"><b>${escapeHtml(t.name)}</b><small>${t.source === 'music-library' ? 'iPhone Music' : 'Local file'} · ${t.type || 'Audio'}</small></div>
-    <button class="row-play" aria-label="Play">${i===current&&isPlaying?'Ⅱ':'▶'}</button></li>`).join('');
-  $('songTitle').textContent = current>=0 ? tracks[current].name : 'Nothing playing';
-  $('songSub').textContent = current>=0 ? 'On this iPhone' : 'Choose a song to begin';
-  $('favorite').textContent = current>=0 && favorites.has(tracks[current].id) ? '♥' : '♡';
-  $('play').textContent = isPlaying ? 'Ⅱ' : '▶';
-}
-function escapeHtml(s='') { return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-async function chooseFiles() {
-  try {
-    const result = await MusicPlayer.pickFiles();
-    for (const item of (result.files || [])) {
-      if (!tracks.some(t=>t.id===item.id)) tracks.push(item);
-    }
-    saveLibrary();
-    render();
-    if (current < 0 && tracks.length) playTrack(0);
-  } catch(e) { alert(e?.message || 'Could not open the Files picker.'); }
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[c]);
 }
-async function loadIPhoneMusic() {
-  try {
-    const result = await MusicPlayer.getMusicLibrary();
-    const imported = result.tracks || [];
+
+function getVisibleTracks() {
+  if (activeTab === 'favorites') {
+    return tracks.map((t, i) => ({ t, i }))
+      .filter(x => favorites.has(x.t.id));
+  }
+
+  if (activeTab === 'playlists') {
+    const playlist = playlists.find(p => p.id === activePlaylist);
+    if (!playlist) return [];
+
+    return playlist.trackIds
+      .map(id => ({
+        t: tracks.find(t => t.id === id),
+        i: tracks.findIndex(t => t.id === id)
+      }))
+      .filter(x => x.i >= 0);
+  }
+
+  return tracks.map((t, i) => ({ t, i }));
+}
+
+function getQueueIndices() {
+  return getVisibleTracks().map(item => item.i);
+}
+
+function moveTrack(direction, wrap = true) {
+  const queue = getQueueIndices();
+
+  if (!queue.length) return;
+
+  let position = queue.indexOf(current);
+
+  if (position < 0) {
+    position = direction > 0 ? -1 : 0;
+  }
+
+  let nextPosition = position + direction;
+
+  if (wrap) {
+    nextPosition = (nextPosition + queue.length) % queue.length;
+  } else if (
+    nextPosition < 0 ||
+    nextPosition >= queue.length
+  ) {
+    current = -1;
+    isPlaying = false;
+
+    if (audio) audio.pause();
+
+    render();
+    return;
+  }
+
+  playTrack(queue[nextPosition]);
+}
+
+function createTabs() {
+  if (document.getElementById('musicTabs')) return;
+
+  const head = document.querySelector('.library-head');
+  if (!head) return;
+
+  const tabs = document.createElement('nav');
+
+  tabs.id = 'musicTabs';
+  tabs.className = 'music-tabs';
+
+  tabs.innerHTML = `
+    <button data-tab="all" class="active">All Songs</button>
+    <button data-tab="favorites">Favorites</button>
+    <button data-tab="playlists">Playlists</button>
+  `;
+
+  head.parentNode.insertBefore(tabs, head);
+
+  tabs.addEventListener('click', e => {
+    const button = e.target.closest('[data-tab]');
+    if (!button) return;
+
+    activeTab = button.dataset.tab;
+    activePlaylist = null;
+    selectedTracks.clear();
+
+    tabs.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b === button);
+    });
+
+    render();
+  });
+}
+
+function createPlaylist() {
+  const name = prompt('Enter playlist name:');
+
+  if (!name || !name.trim()) return;
+
+  const playlist = {
+    id: `playlist-${Date.now()}`,
+    name: name.trim(),
+    trackIds: []
+  };
+
+  playlists.push(playlist);
+
+  savePlaylists();
+
+  activeTab = 'playlists';
+  activePlaylist = playlist.id;
+
+  render();
+}
+
+function addCurrentToPlaylist() {
+  if (current < 0) {
+    alert('Choose a song first.');
+    return;
+  }
+
+  if (!playlists.length) {
+    createPlaylist();
+    if (!playlists.length) return;
+  }
+
+  const names = playlists
+    .map((p, i) => `${i + 1}. ${p.name}`)
+    .join('\n');
+
+  const choice = prompt(`Choose playlist number:\n${names}`);
+
+  if (choice === null) return;
+
+  const index = Number(choice) - 1;
+
+  if (!Number.isInteger(index) || !playlists[index]) return;
+
+  const id = tracks[current].id;
+
+  if (!playlists[index].trackIds.includes(id)) {
+    playlists[index].trackIds.push(id);
+    savePlaylists();
+    alert('Added to playlist.');
+  } else {
+    alert('This song is already in the playlist.');
+  }
+}
+
+function render() {
+  const visible = getVisibleTracks();
+
+  $('trackCount').textContent =
+    `${visible.length} ${visible.length === 1 ? 'song' : 'songs'}`;
+
+  $('empty').hidden = visible.length > 0;
+
+  $('tracks').innerHTML = visible.map(({ t, i }) => `
+    <li class="track ${i === current ? 'active' : ''}"
+        data-index="${i}">
+
+      <input
+        class="track-select"
+        type="checkbox"
+        data-select="${i}"
+        aria-label="Select ${escapeHtml(t.name)}"
+        ${selectedTracks.has(t.id) ? 'checked' : ''}>
+
+      <div class="track-art">♫</div>
+
+      <div class="track-info">
+        <b>${escapeHtml(t.name)}</b>
+        <small>
+          ${t.source === 'music-library' ? 'iPhone Music' : 'Local file'}
+          · ${escapeHtml(t.type || 'Audio')}
+        </small>
+      </div>
+
+      <button class="row-play" aria-label="Play">
+        ${i === current && isPlaying ? 'Ⅱ' : '▶'}
+      </button>
+    </li>
+  `).join('');
+
+  $('songTitle').textContent =
+    current >= 0 ? tracks[current].name : 'Nothing playing';
+
+  $('songSub').textContent =
+    current >= 0
+      ? (tracks[current].artist || 'On this device')
+      : 'Choose a song to begin';
+
+  $('favorite').textContent =
+    current >= 0 && favorites.has(tracks[current].id)
+      ? '♥'
+      : '♡';
+
+  $('play').textContent = isPlaying ? 'Ⅱ' : '▶';
+
+  if (activeTab === 'playlists') {
+    showPlaylistTools();
+  } else {
+    removePlaylistTools();
+  }
+}
+
+function showPlaylistTools() {
+  const head = document.querySelector('.library-head');
+  if (!head) return;
+
+  let tools = document.getElementById('playlistTools');
+
+  if (!tools) {
+    tools = document.createElement('div');
+    tools.id = 'playlistTools';
+    tools.className = 'playlist-tools';
+
+    head.insertAdjacentElement('afterend', tools);
+  }
+
+  tools.innerHTML = `
+    <button id="newPlaylist" class="outline-btn">
+      ＋ New Playlist
+    </button>
+
+    <select id="playlistSelect" aria-label="Select playlist">
+      <option value="">Select playlist</option>
+      ${playlists.map(p => `
+        <option value="${escapeHtml(p.id)}">
+          ${escapeHtml(p.name)}
+        </option>
+      `).join('')}
+    </select>
+
+    <button id="addSelected" class="outline-btn">
+      Add Selected (${selectedTracks.size})
+    </button>
+
+    <button id="addToPlaylist" class="outline-btn">
+      Add Current Song
+    </button>
+
+    <button id="removeSelected" class="outline-btn">
+      Remove Selected
+    </button>
+  `;
+
+  $('newPlaylist').onclick = createPlaylist;
+
+  $('addToPlaylist').onclick = addCurrentToPlaylist;
+
+  $('playlistSelect').onchange = e => {
+    activePlaylist = e.target.value || null;
+    selectedTracks.clear();
+    render();
+  };
+
+  $('addSelected').onclick = () => {
+    const playlist = playlists.find(
+      p => p.id === activePlaylist
+    );
+
+    if (!playlist) {
+      alert('Please select a playlist first.');
+      return;
+    }
+
+    if (!selectedTracks.size) {
+      alert('Select one or more songs first.');
+      return;
+    }
+
     let added = 0;
-    for (const item of imported) {
-      if (!tracks.some(t => t.id === item.id)) {
-        tracks.push({ ...item, source: 'music-library' });
+
+    for (const id of selectedTracks) {
+      if (
+        tracks.some(t => t.id === id) &&
+        !playlist.trackIds.includes(id)
+      ) {
+        playlist.trackIds.push(id);
         added++;
       }
     }
+
+    savePlaylists();
+    selectedTracks.clear();
+    render();
+
+    alert(`Added ${added} songs to ${playlist.name}.`);
+  };
+
+  $('removeSelected').onclick = () => {
+    const playlist = playlists.find(
+      p => p.id === activePlaylist
+    );
+
+    if (!playlist) {
+      alert('Please select a playlist first.');
+      return;
+    }
+
+    if (!selectedTracks.size) {
+      alert('Select songs to remove first.');
+      return;
+    }
+
+    playlist.trackIds = playlist.trackIds.filter(
+      id => !selectedTracks.has(id)
+    );
+
+    selectedTracks.clear();
+
+    savePlaylists();
+    render();
+  };
+
+  if (activePlaylist) {
+    $('playlistSelect').value = activePlaylist;
+  }
+}
+
+function removePlaylistTools() {
+  document.getElementById('playlistTools')?.remove();
+}
+
+async function chooseFiles() {
+  if (isNative) {
+    try {
+      const result = await MusicPlayer.pickFiles();
+
+      for (const item of (result.files || [])) {
+        if (!tracks.some(t => t.id === item.id)) {
+          tracks.push(item);
+        }
+      }
+
+      saveLibrary();
+      render();
+
+      if (current < 0 && tracks.length) {
+        await playTrack(0);
+      }
+    } catch (e) {
+      alert(e?.message || 'Could not open Files picker.');
+    }
+
+    return;
+  }
+
+  const input = document.createElement('input');
+
+  input.type = 'file';
+  input.accept = 'audio/*,.mp3,.m4a,.wav,.aac,.flac';
+  input.multiple = true;
+
+  input.onchange = () => {
+    for (const file of input.files || []) {
+      tracks.push({
+        id: `web-${Date.now()}-${Math.random()}`,
+        name: file.name,
+        type: file.type || 'Audio',
+        artist: 'Local file',
+        source: 'web',
+        webUrl: URL.createObjectURL(file)
+      });
+    }
+
     saveLibrary();
     render();
-    if (!imported.length) {
-      alert('No downloadable songs were found in your iPhone Music Library.');
-    } else if (added === 0) {
-      alert(`Found ${imported.length} songs. They are already in your library.`);
-    } else {
-      alert(`Added ${added} songs from your iPhone Music Library.`);
+  };
+
+  input.click();
+}
+
+async function loadIPhoneMusic() {
+  if (!isNative) {
+    alert('iPhone Music Library is available in the iPhone app only.');
+    return;
+  }
+
+  try {
+    const result = await MusicPlayer.getMusicLibrary();
+    const imported = result.tracks || [];
+
+    let added = 0;
+
+    for (const item of imported) {
+      if (!tracks.some(t => t.id === item.id)) {
+        tracks.push({
+          ...item,
+          source: 'music-library'
+        });
+
+        added++;
+      }
     }
+
+    saveLibrary();
+    render();
+
+    alert(
+      added
+        ? `Added ${added} songs from your iPhone Music Library.`
+        : imported.length
+          ? 'These songs are already in your library.'
+          : 'No downloadable songs were found.'
+    );
+
   } catch (e) {
     alert(e?.message || 'Could not access your iPhone Music Library.');
   }
@@ -75,66 +475,305 @@ async function loadIPhoneMusic() {
 
 async function playTrack(index) {
   if (!tracks.length) return;
+
   current = (index + tracks.length) % tracks.length;
+
+  const track = tracks[current];
+
   try {
-    const playback = await MusicPlayer.play({id:tracks[current].id, title:tracks[current].name});
-    isPlaying = true;
-    updateProgress({
-      currentTime: Number(playback?.currentTime) || 0,
-      duration: Number(playback?.duration) || 0
-    });
+    if (isNative) {
+      const playback = await MusicPlayer.play({
+        id: track.id,
+        title: track.name
+      });
+
+      isPlaying = true;
+
+      updateProgress({
+        currentTime: playback?.currentTime || 0,
+        duration: playback?.duration || 0
+      });
+
+    } else {
+      if (!track.webUrl) {
+        alert(
+          'Please add this audio file again. Browser file access does not persist after reloading.'
+        );
+        return;
+      }
+
+      if (audio) {
+        audio.pause();
+        audio.onended = null;
+      }
+
+      audio = new Audio(track.webUrl);
+
+      audio.onended = handleEnded;
+
+      audio.ontimeupdate = () => {
+        updateProgress({
+          currentTime: audio.currentTime,
+          duration: audio.duration
+        });
+      };
+
+      await audio.play();
+
+      isPlaying = true;
+    }
+
     render();
-  } catch(e) { isPlaying=false; alert(e?.message || 'Unable to play this audio file.'); render(); }
+
+  } catch (e) {
+    isPlaying = false;
+    alert(e?.message || 'Unable to play this audio file.');
+    render();
+  }
 }
+
+async function handleEnded() {
+  isPlaying = false;
+
+  if (repeat) {
+    await playTrack(current);
+    return;
+  }
+
+  if (isShuffle) {
+    const choices = getQueueIndices().filter(
+      i => i !== current
+    );
+
+    if (choices.length) {
+      await playTrack(
+        choices[Math.floor(Math.random() * choices.length)]
+      );
+      return;
+    }
+  }
+
+  moveTrack(1, false);
+}
+
 async function togglePlay() {
-  if (current < 0) { if(tracks.length) await playTrack(0); return; }
-  if (isPlaying) { await MusicPlayer.pause(); isPlaying=false; }
-  else { await MusicPlayer.resume(); isPlaying=true; }
-  render();
+  if (current < 0) {
+    if (tracks.length) {
+      await playTrack(0);
+    }
+    return;
+  }
+
+  try {
+    if (isNative) {
+      if (isPlaying) {
+        await MusicPlayer.pause();
+      } else {
+        await MusicPlayer.resume();
+      }
+    } else if (audio) {
+      if (isPlaying) {
+        audio.pause();
+      } else {
+        await audio.play();
+      }
+    }
+
+    isPlaying = !isPlaying;
+    render();
+
+  } catch (e) {
+    alert(e?.message || 'Playback control failed.');
+  }
 }
-$('addMusic').onclick = $('browse').onclick = $('emptyAdd').onclick = chooseFiles;
-$('iphoneMusic').onclick = loadIPhoneMusic;
-$('play').onclick = togglePlay;
-$('previous').onclick = () => playTrack(current<=0 ? tracks.length-1 : current-1);
-$('next').onclick = () => playTrack(current+1);
-$('shuffle').onclick = () => { isShuffle=!isShuffle; $('shuffle').classList.toggle('selected',isShuffle); };
-$('repeat').onclick = () => { repeat=!repeat; $('repeat').classList.toggle('selected',repeat); };
-$('favorite').onclick = () => { if(current>=0){ const id=tracks[current].id; favorites.has(id)?favorites.delete(id):favorites.add(id); saveFavorites(); render(); } };
-$('tracks').onclick = (e) => { const li=e.target.closest('[data-index]'); if(li) playTrack(Number(li.dataset.index)); };
-MusicPlayer.addListener('playbackState', state => { isPlaying=!!state.playing; render(); });
-let playbackDuration = 0;
-let isSeeking = false;
+
 function updateProgress(state = {}) {
-  const currentTime = Math.max(0, Number(state.currentTime) || 0);
-  const duration = Math.max(0, Number(state.duration) || 0);
-  if (duration > 0) playbackDuration = duration;
+  const currentTime = Math.max(
+    0,
+    Number(state.currentTime) || 0
+  );
+
+  const duration = Math.max(
+    0,
+    Number(state.duration) || 0
+  );
+
+  if (duration > 0) {
+    playbackDuration = duration;
+  }
+
   $('elapsed').textContent = fmt(currentTime);
-  $('duration').textContent = fmt(duration || playbackDuration);
+
+  $('duration').textContent =
+    fmt(duration || playbackDuration);
+
   if (!isSeeking) {
     $('seek').value = duration > 0
-      ? String(Math.max(0, Math.min(1000, Math.round(currentTime / duration * 1000))))
+      ? String(
+          Math.min(
+            1000,
+            Math.round(currentTime / duration * 1000)
+          )
+        )
       : '0';
   }
 }
-MusicPlayer.addListener('playbackProgress', updateProgress);
-$('seek').onpointerdown = () => { isSeeking = true; };
-$('seek').oninput = () => {
-  const previewTime = playbackDuration * Number($('seek').value) / 1000;
-  $('elapsed').textContent = fmt(previewTime);
-};
+
 async function finishSeeking() {
   if (!isSeeking) return;
+
   isSeeking = false;
-  if (current >= 0 && playbackDuration > 0) {
-    const fraction = Number($('seek').value) / 1000;
-    await MusicPlayer.seek({fraction});
-    updateProgress({currentTime: playbackDuration * fraction, duration: playbackDuration});
+
+  if (current < 0 || playbackDuration <= 0) return;
+
+  const fraction = Number($('seek').value) / 1000;
+
+  if (isNative) {
+    await MusicPlayer.seek({ fraction });
+  } else if (audio) {
+    audio.currentTime = playbackDuration * fraction;
   }
 }
+
+// Main buttons
+
+$('addMusic').onclick = chooseFiles;
+$('browse').onclick = chooseFiles;
+$('emptyAdd').onclick = chooseFiles;
+$('iphoneMusic').onclick = loadIPhoneMusic;
+
+$('play').onclick = togglePlay;
+
+$('previous').onclick = () => {
+  moveTrack(-1, true);
+};
+
+$('next').onclick = () => {
+  if (isShuffle) {
+    const choices = getQueueIndices().filter(
+      i => i !== current
+    );
+
+    if (choices.length) {
+      playTrack(
+        choices[Math.floor(Math.random() * choices.length)]
+      );
+    }
+  } else {
+    moveTrack(1, true);
+  }
+};
+
+$('shuffle').onclick = () => {
+  isShuffle = !isShuffle;
+
+  $('shuffle').classList.toggle(
+    'selected',
+    isShuffle
+  );
+};
+
+$('repeat').onclick = () => {
+  repeat = !repeat;
+
+  $('repeat').classList.toggle(
+    'selected',
+    repeat
+  );
+};
+
+$('favorite').onclick = () => {
+  if (current < 0) return;
+
+  const id = tracks[current].id;
+
+  if (favorites.has(id)) {
+    favorites.delete(id);
+  } else {
+    favorites.add(id);
+  }
+
+  saveFavorites();
+  render();
+};
+
+$('tracks').onclick = e => {
+  const checkbox = e.target.closest('[data-select]');
+
+  if (checkbox) {
+    const id = tracks[
+      Number(checkbox.dataset.select)
+    ]?.id;
+
+    if (id) {
+      if (checkbox.checked) {
+        selectedTracks.add(id);
+      } else {
+        selectedTracks.delete(id);
+      }
+    }
+
+    const addButton = document.getElementById('addSelected');
+
+    if (addButton) {
+      addButton.textContent =
+        `Add Selected (${selectedTracks.size})`;
+    }
+
+    return;
+  }
+
+  const li = e.target.closest('[data-index]');
+
+  if (li) {
+    playTrack(Number(li.dataset.index));
+  }
+};
+
+// Progress bar
+
+$('seek').onpointerdown = () => {
+  isSeeking = true;
+};
+
+$('seek').oninput = () => {
+  $('elapsed').textContent = fmt(
+    playbackDuration * Number($('seek').value) / 1000
+  );
+};
+
 $('seek').onchange = finishSeeking;
 $('seek').onpointerup = finishSeeking;
 $('seek').ontouchend = finishSeeking;
-MusicPlayer.addListener('remoteNext', () => playTrack(current+1));
-MusicPlayer.addListener('remotePrevious', () => playTrack(current<=0?tracks.length-1:current-1));
-MusicPlayer.addListener('remotePlayPause', togglePlay);
+
+// Native iPhone playback events
+
+if (isNative) {
+  MusicPlayer.addListener('playbackState', state => {
+    isPlaying = !!state.playing;
+    render();
+  });
+
+  MusicPlayer.addListener(
+    'playbackProgress',
+    updateProgress
+  );
+
+  MusicPlayer.addListener(
+    'remoteNext',
+    () => handleEnded()
+  );
+
+  MusicPlayer.addListener(
+    'remotePrevious',
+    () => moveTrack(-1, true)
+  );
+
+  MusicPlayer.addListener(
+    'remotePlayPause',
+    togglePlay
+  );
+}
+
+createTabs();
 render();
