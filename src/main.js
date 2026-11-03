@@ -820,6 +820,13 @@ if (isNative) {
     updateProgress
   );
 
+  // Native AVAudioPlayer finishes with a trackFinished event.
+  // Advance the queue just like the browser audio onended handler.
+  MusicPlayer.addListener(
+    'trackFinished',
+    () => handleEnded()
+  );
+
   MusicPlayer.addListener(
     'remoteNext',
     () => handleEnded()
