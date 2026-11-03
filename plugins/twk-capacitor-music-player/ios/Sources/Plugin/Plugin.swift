@@ -305,7 +305,7 @@ public class MusicPlayerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDel
         do {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            call.reject("Audio session activation failed: \\(error.localizedDescription)")
+            call.reject("Audio session activation failed: \(error.localizedDescription)")
             return
         }
 
