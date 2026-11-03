@@ -63,6 +63,7 @@ function escapeHtml(value = '') {
   })[c]);
 }
 
+
 // TWK Music in-app dialogs (no browser-native "says" popups).
 function ensureDialogStyles() {
   if (document.getElementById('twkDialogStyles')) return;
@@ -177,6 +178,7 @@ function createTabs() {
 
   tabs.id = 'musicTabs';
   tabs.className = 'music-tabs';
+
   tabs.innerHTML = `
     <button data-tab="all" class="active">All Songs</button>
     <button data-tab="favorites">Favorites</button>
@@ -275,7 +277,7 @@ function render() {
         aria-label="Select ${escapeHtml(t.name)}"
         ${selectedTracks.has(t.id) ? 'checked' : ''}>
 
-      <div class="track-art">&#9835;</div>
+      <div class="track-art">♫</div>
 
       <div class="track-info">
         <b>${escapeHtml(t.name)}</b>
@@ -286,7 +288,7 @@ function render() {
       </div>
 
       <button class="row-play" aria-label="Play">
-        ${i === current && isPlaying ? '&#9208;' : '&#9654;'}
+        ${i === current && isPlaying ? 'Ⅱ' : '▶'}
       </button>
     </li>
   `).join('');
@@ -301,10 +303,10 @@ function render() {
 
   $('favorite').textContent =
     current >= 0 && favorites.has(tracks[current].id)
-      ? '\u2665'
-      : '\u2661';
+      ? '♥'
+      : '♡';
 
-  $('play').textContent = isPlaying ? '\u23F8' : '\u25B6';
+  $('play').textContent = isPlaying ? 'Ⅱ' : '▶';
 
   if (activeTab === 'playlists') {
     showPlaylistTools();
@@ -355,6 +357,7 @@ function showPlaylistTools() {
   `;
 
   $('newPlaylist').onclick = createPlaylist;
+
   $('addToPlaylist').onclick = addCurrentToPlaylist;
 
   $('playlistSelect').onchange = e => {
@@ -602,34 +605,46 @@ async function handleEnded() {
   moveTrack(1, false);
 }
 
+let playbackControlBusy = false;
+
 async function togglePlay() {
+  if (playbackControlBusy) return;
+
   if (current < 0) {
-    if (tracks.length) {
-      await playTrack(0);
-    }
+    if (tracks.length) await playTrack(0);
     return;
   }
 
+  const shouldPlay = !isPlaying;
+  playbackControlBusy = true;
+
   try {
     if (isNative) {
-      if (isPlaying) {
-        await MusicPlayer.pause();
+      if (shouldPlay) {
+        const result = await MusicPlayer.resume();
+        isPlaying = result?.playing === false ? false : true;
       } else {
-        await MusicPlayer.resume();
+        const result = await MusicPlayer.pause();
+        isPlaying = result?.playing === true ? true : false;
       }
     } else if (audio) {
-      if (isPlaying) {
-        audio.pause();
-      } else {
+      if (shouldPlay) {
         await audio.play();
+      } else {
+        audio.pause();
       }
+      isPlaying = !audio.paused;
+    } else {
+      isPlaying = false;
     }
 
-    isPlaying = !isPlaying;
     render();
-
   } catch (e) {
+    isPlaying = isNative ? false : !!audio && !audio.paused;
+    render();
     showMessage(e?.message || 'Playback control failed.');
+  } finally {
+    playbackControlBusy = false;
   }
 }
 
@@ -680,6 +695,7 @@ async function finishSeeking() {
     audio.currentTime = playbackDuration * fraction;
   }
 }
+
 // Main buttons
 
 $('addMusic').onclick = chooseFiles;
@@ -821,3 +837,4 @@ if (isNative) {
 }
 
 createTabs();
+render();
