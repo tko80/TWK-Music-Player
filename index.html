@@ -1,32 +1,10 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#090b12">\n  <link rel="manifest" href="/manifest.json">\n  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">\n  <link rel="apple-touch-icon" href="/icons/icon.svg">
-  <title>TWK Music</title>
-</head>
-<body>
-  <div id="app">
-    <header class="topbar">
-      <div class="brand"><div class="brand-icon">♫</div><div><b>TWK Music</b><small>YOUR MUSIC, YOUR WAY</small></div></div>
-      <button id="addMusic" class="icon-btn" aria-label="Add music">＋</button>
-    </header>
-    <main>
-      <section class="welcome"><span class="eyebrow">YOUR LIBRARY</span><h1>Feel every<br><em>moment.</em></h1><p>Play music from your iPhone Music Library or Files.</p></section>
-      <nav class="library-tabs" aria-label="Music library views"><button class="tab active" data-view="all"><span class="tab-icon">♫</span>All Songs</button><button class="tab" data-view="favorites"><span class="tab-icon">♥</span>Favorites</button><button class="tab" data-view="playlists"><span class="tab-icon">▤</span>Playlists</button></nav>
-      <section class="library-head"><div><h2 id="viewTitle">All Songs</h2><span id="trackCount">0 songs</span></div><div class="library-actions" id="libraryActions"><button id="iphoneMusic" class="outline-btn">iPhone Music</button><button id="browse" class="outline-btn">＋ Add songs</button></div></section>
-      <button id="playlistBack" class="outline-btn" hidden>← All playlists</button><section id="playlistPanel" class="playlist-panel" hidden><div class="playlist-toolbar"><p>Your collections</p><button id="newPlaylist" class="primary-btn">＋ Create playlist</button></div><div id="playlistList" class="playlist-list"></div></section>
-      <div id="empty" class="empty"><div class="empty-note">♫</div><b>Your library is waiting</b><p>Add MP3, M4A or WAV files from the Files app.</p><button id="emptyAdd" class="primary-btn">Choose music files</button></div>
-      <ul id="tracks" class="tracks"></ul>
-    </main>
-    <footer class="player" id="player">
-      <div class="now-playing"><div class="cover">♫</div><div class="track-meta"><b id="songTitle">Nothing playing</b><small id="songSub">Choose a song to begin</small></div><button id="favorite" class="heart">♡</button></div>
-      <div class="progress-wrap"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="duration">0:00</span></div>
-      <div class="controls"><button id="shuffle" class="small-control">⤨</button><button id="previous" class="control" aria-label="Previous song">|◀</button><button id="play" class="play-btn">▶</button><button id="next" class="control" aria-label="Next song">▶|</button><button id="repeat" class="small-control" aria-label="Repeat mode">↻</button></div>
-      <div class="player-hint">Background playback & Lock Screen controls supported on iPhone</div>
-    </footer>
-  </div>
-  <script type="module" src="/src/main.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#090b12"><link rel="icon" type="image/png" href="/icon.png"><link rel="apple-touch-icon" href="/icon.png"><title>TWK Music</title></head>
+<body><div id="app">
+<header class="topbar"><div class="brand"><div class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 8l12-2M5 21a4 3 0 1 0 0-6 4 3 0 0 0 0 6Zm12-2a4 3 0 1 0 0-6 4 3 0 0 0 0 6Z"/></svg></div><div><b>TWK Music</b><small>YOUR MUSIC, YOUR WAY</small></div></div><button id="addMusic" class="icon-btn" aria-label="Add music">＋</button></header>
+<main><section class="welcome"><span class="eyebrow">YOUR LIBRARY</span><h1>Feel every<br><em>moment.</em></h1><p>Play music from your iPhone Music Library or Files.</p></section>
+<nav class="library-tabs" aria-label="Music library views"><button class="tab active" data-view="all"><span>♫</span>All Songs</button><button class="tab" data-view="favorites"><span>♥</span>Favorites</button><button class="tab" data-view="playlists"><span>▤</span>Playlists</button></nav>
+<section class="library-head"><div><h2 id="viewTitle">All Songs</h2><span id="trackCount">0 songs</span></div><div class="library-actions" id="libraryActions"><button id="iphoneMusic" class="outline-btn">iPhone Music</button><button id="browse" class="outline-btn">＋ Add songs</button></div></section>
+<section id="playlistPanel" class="playlist-panel" hidden><div class="playlist-toolbar"><p>Your collections</p><button id="newPlaylist" class="primary-btn">＋ Create playlist</button></div><div id="playlistList" class="playlist-list"></div></section>
+<div id="empty" class="empty"><div class="empty-note">♫</div><b id="emptyTitle">Your library is waiting</b><p id="emptyText">Add MP3, M4A or WAV files from the Files app.</p><button id="emptyAdd" class="primary-btn">Choose music files</button></div><ul id="tracks" class="tracks"></ul></main>
+<footer class="player" id="player"><div class="now-playing"><div class="cover">♫</div><div class="track-meta"><b id="songTitle">Nothing playing</b><small id="songSub">Choose a song to begin</small></div><button id="favorite" class="heart" aria-label="Toggle favorite">♡</button></div><div class="progress-wrap"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="duration">0:00</span></div><div class="controls"><button id="shuffle" class="small-control" aria-label="Shuffle">⤨</button><button id="previous" class="control" aria-label="Previous">⏮</button><button id="play" class="play-btn" aria-label="Play">▶</button><button id="next" class="control" aria-label="Next">⏭</button><button id="repeat" class="small-control" aria-label="Repeat">↻</button></div><div class="player-hint">Background playback & Lock Screen controls supported on iPhone</div></footer></div><script type="module" src="/src/main.js"></script></body></html>
