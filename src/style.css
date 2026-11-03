@@ -252,7 +252,143 @@
     padding-right: 18px;
     padding-bottom: 360px;
   }
+/* TWK MUSIC - PREMIUM BUTTON DESIGN ONLY */
 
+button {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background .2s ease,
+    border-color .2s ease,
+    color .2s ease,
+    transform .18s ease,
+    box-shadow .2s ease;
+}
+
+button:active {
+  transform: scale(.94);
+}
+
+/* Header Add Button */
+.icon-btn {
+  background: linear-gradient(145deg, #30264f, #1c1a30);
+  border: 1px solid #a58bff40;
+  color: #d6c5ff;
+  box-shadow: 0 4px 16px #0004;
+}
+
+/* General Outline Buttons */
+.outline-btn,
+.library-actions .outline-btn,
+.playlist-tools button {
+  background: linear-gradient(145deg, #29243f, #191827);
+  border: 1px solid #a58bff55;
+  border-radius: 18px;
+  color: #e4d9ff;
+  font-weight: 600;
+  box-shadow: 0 3px 12px #0003;
+}
+
+.outline-btn:active,
+.playlist-tools button:active {
+  background: #8c70f5;
+  color: white;
+}
+
+/* All Songs / Favorites / Playlists */
+.library-tabs button,
+.music-tabs button {
+  border-radius: 20px;
+  border: 1px solid #a58bff40;
+  background: linear-gradient(145deg, #242136, #171624);
+  color: #b9b3ca;
+  padding: 10px 15px;
+  font-weight: 600;
+}
+
+.library-tabs button.active,
+.music-tabs button.active {
+  background: linear-gradient(135deg, #b18aff, #7858e8);
+  border-color: #c4aaff;
+  color: #fff;
+  box-shadow: 0 4px 16px #8c70f555;
+}
+
+/* Playlist Select */
+.playlist-tools select {
+  border: 1px solid #a58bff65;
+  border-radius: 16px;
+  background: #211d35;
+  color: #eee7ff;
+}
+
+/* Track Play Buttons */
+.row-play {
+  background: linear-gradient(145deg, #39304f, #211e32);
+  border: 1px solid #a58bff40;
+  color: #e1d3ff;
+  box-shadow: 0 3px 10px #0004;
+}
+
+.row-play:active {
+  background: #8c70f5;
+}
+
+/* Main Play Button */
+.play-btn {
+  background: linear-gradient(145deg, #c2a2ff, #8c70f5);
+  color: #171222;
+  border: 1px solid #d5c1ff;
+  box-shadow: 0 5px 20px #8c70f566;
+}
+
+/* Previous / Next / Shuffle / Repeat */
+.control,
+.small-control {
+  color: #c8b8f5;
+  border-radius: 14px;
+  padding: 8px;
+}
+
+.control:active,
+.small-control:active {
+  background: #a58bff25;
+}
+
+/* Selected Shuffle / Repeat */
+.selected {
+  color: #c5a6ff !important;
+  background: #a58bff20;
+  border-radius: 12px;
+  box-shadow: 0 0 12px #a58bff30;
+}
+
+/* Favorite Heart */
+.heart {
+  color: #c7aaff;
+  transition: transform .2s ease, color .2s ease;
+}
+
+.heart:active {
+  transform: scale(1.2);
+}
+
+/* Empty Library Button */
+.primary-btn {
+  background: linear-gradient(135deg, #b18aff, #7858e8);
+  border: 1px solid #d0baff;
+  color: white;
+  box-shadow: 0 5px 18px #8c70f555;
+}
+
+/* Keyboard / Hover Feedback */
+@media (hover: hover) {
+  .outline-btn:hover,
+  .row-play:hover,
+  .icon-btn:hover {
+    border-color: #b99aff;
+    box-shadow: 0 4px 16px #8c70f533;
+  }
+}
   .player {
     padding-left: 16px;
     padding-right: 16px;
