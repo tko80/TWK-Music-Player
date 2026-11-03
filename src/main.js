@@ -383,9 +383,85 @@ function render() {
 
   if (activeTab === 'playlists') {
     showPlaylistTools();
+    removeFavoritesTools();
+  } else if (activeTab === 'favorites') {
+    removePlaylistTools();
+    showFavoritesTools();
   } else {
     removePlaylistTools();
+    removeFavoritesTools();
   }
+}
+
+function showFavoritesTools() {
+  const head = document.querySelector('.library-head');
+  if (!head) return;
+
+  let bar = document.getElementById('favoritesActionBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'favoritesActionBar';
+    bar.className = 'playlist-tools favorites-action-bar';
+    head.insertAdjacentElement('afterend', bar);
+  }
+
+  bar.innerHTML = `
+    <select id="favoritesPlaylistSelect" aria-label="Choose playlist">
+      <option value="">Choose playlist</option>
+      ${playlists.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
+    </select>
+    <button type="button" id="favoritesAddSelected" class="outline-btn">Add Selected (${selectedTracks.size})</button>
+    <button type="button" id="favoritesRemoveSelected" class="outline-btn">Remove from Favorites</button>
+  `;
+
+  $('favoritesAddSelected').onclick = async () => {
+    const selectedIds = [...selectedTracks].filter(id => favorites.has(id));
+    if (!selectedIds.length) {
+      showMessage('Select one or more favorite songs first.');
+      return;
+    }
+
+    let playlistId = $('favoritesPlaylistSelect').value;
+    if (!playlistId) {
+      const name = await showPrompt('Create playlist', 'Enter playlist name');
+      if (!name || !name.trim()) return;
+      const playlist = { id: `playlist-${Date.now()}`, name: name.trim(), trackIds: [] };
+      playlists.push(playlist);
+      playlistId = playlist.id;
+    }
+
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+
+    let added = 0;
+    for (const id of selectedIds) {
+      if (!playlist.trackIds.includes(id)) {
+        playlist.trackIds.push(id);
+        added++;
+      }
+    }
+    savePlaylists();
+    selectedTracks.clear();
+    render();
+    showMessage(`Added ${added} songs to ${playlist.name}.`);
+  };
+
+  $('favoritesRemoveSelected').onclick = () => {
+    const selectedIds = [...selectedTracks].filter(id => favorites.has(id));
+    if (!selectedIds.length) {
+      showMessage('Select one or more favorite songs first.');
+      return;
+    }
+    selectedIds.forEach(id => favorites.delete(id));
+    selectedTracks.clear();
+    saveFavorites();
+    render();
+    showMessage(`Removed ${selectedIds.length} songs from Favorites.`);
+  };
+}
+
+function removeFavoritesTools() {
+  document.getElementById('favoritesActionBar')?.remove();
 }
 
 function showPlaylistTools() {
@@ -829,10 +905,12 @@ $('tracks').onclick = e => {
     }
 
     const addButton = document.getElementById('addSelected');
-
     if (addButton) {
-      addButton.textContent =
-        `Add Selected (${selectedTracks.size})`;
+      addButton.textContent = `Add Selected (${selectedTracks.size})`;
+    }
+    const favoritesAddButton = document.getElementById('favoritesAddSelected');
+    if (favoritesAddButton) {
+      favoritesAddButton.textContent = `Add Selected (${selectedTracks.size})`;
     }
 
     return;
