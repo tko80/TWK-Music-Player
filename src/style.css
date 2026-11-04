@@ -396,3 +396,51 @@ button:active {
 }
 /* Hide top music navigation tabs */
 .music-tabs { display: none !important; }
+
+/* TWK Music - iPhone seek slider touch fix only */
+.player .progress-wrap input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.player .progress-wrap input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #555363;
+}
+
+.player .progress-wrap input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #0008;
+}
+
+.player .progress-wrap input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #555363;
+}
+
+.player .progress-wrap input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #0008;
+}
