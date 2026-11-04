@@ -28,6 +28,9 @@ let repeat = false;
 let activeTab = 'all';
 let activePlaylist = null;
 let selectedTracks = new Set();
+let selectionMode = false;
+let trackPressTimer = null;
+let trackPressTriggered = false;
 
 let audio = null;
 let playbackDuration = 0;
@@ -262,6 +265,8 @@ function createTabs() {
 
     activeTab = tabName;
     activePlaylist = null;
+    selectionMode = false;
+    selectedTracks.clear();
     tabs.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === button));
     render();
   });
@@ -322,6 +327,76 @@ async function addCurrentToPlaylist() {
   }
 }
 
+async function deleteSelectedTracks() {
+  const ids = new Set(selectedTracks);
+  const indices = tracks.map((track, index) => ids.has(track.id) ? index : -1).filter(index => index >= 0);
+  if (!indices.length) {
+    showMessage('Select one or more songs first.');
+    return;
+  }
+  const confirmed = await showConfirm('Delete selected songs?', `Remove ${indices.length} ${indices.length === 1 ? 'song' : 'songs'} from your TWK Music library? This also removes them from Favorites and Playlists.`);
+  if (!confirmed) return;
+
+  const currentTrackId = current >= 0 ? tracks[current]?.id : null;
+  const deletingCurrent = currentTrackId && ids.has(currentTrackId);
+  if (deletingCurrent) {
+    if (isNative) { try { await MusicPlayer.pause(); } catch (_) {} }
+    if (audio) { audio.pause(); audio.onended = null; audio = null; }
+    current = -1;
+    isPlaying = false;
+    playbackDuration = 0;
+    updateProgress({ currentTime: 0, duration: 0 });
+  } else if (current >= 0) {
+    current -= indices.filter(index => index < current).length;
+  }
+
+  indices.reverse().forEach(index => {
+    const track = tracks[index];
+    if (track?.webUrl) URL.revokeObjectURL(track.webUrl);
+    tracks.splice(index, 1);
+  });
+  ids.forEach(id => favorites.delete(id));
+  playlists.forEach(playlist => { playlist.trackIds = playlist.trackIds.filter(id => !ids.has(id)); });
+  selectedTracks.clear();
+  selectionMode = false;
+  saveLibrary();
+  saveFavorites();
+  savePlaylists();
+  render();
+  showMessage(`${indices.length} ${indices.length === 1 ? 'song' : 'songs'} removed from your TWK Music library. Original files are not deleted.`);
+}
+
+function showSelectionTools() {
+  let bar = document.getElementById('selectionActionBar');
+  const head = document.querySelector('.library-head');
+  if (!head) return;
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'selectionActionBar';
+    bar.className = 'playlist-tools';
+    head.insertAdjacentElement('afterend', bar);
+  }
+  bar.innerHTML = `<span style="align-self:center;color:#aaa6bd;font-size:12px;flex:1">${selectedTracks.size} selected</span><button type="button" id="deleteSelectedTracks" class="outline-btn">Delete Selected</button><button type="button" id="cancelTrackSelection" class="outline-btn">Cancel</button>`;
+  document.getElementById('deleteSelectedTracks').onclick = deleteSelectedTracks;
+  document.getElementById('cancelTrackSelection').onclick = () => {
+    selectedTracks.clear();
+    selectionMode = false;
+    render();
+  };
+}
+
+function removeSelectionTools() {
+  document.getElementById('selectionActionBar')?.remove();
+}
+
+function toggleTrackSelection(index) {
+  const track = tracks[index];
+  if (!track) return;
+  if (selectedTracks.has(track.id)) selectedTracks.delete(track.id);
+  else selectedTracks.add(track.id);
+  render();
+}
+
 function render() {
   const visible = getVisibleTracks();
   const visibleTabs = document.querySelector('.library-tabs') || document.getElementById('musicTabs');
@@ -342,12 +417,7 @@ function render() {
     <li class="track ${i === current ? 'active' : ''}"
         data-index="${i}">
 
-      <input
-        class="track-select"
-        type="checkbox"
-        data-select="${i}"
-        aria-label="Select ${escapeHtml(t.name)}"
-        ${selectedTracks.has(t.id) ? 'checked' : ''}>
+      ${selectionMode ? `<input class="track-select" type="checkbox" data-select="${i}" aria-label="Select ${escapeHtml(t.name)}" ${selectedTracks.has(t.id) ? 'checked' : ''}>` : ''}
 
       <div class="track-art">♫</div>
 
@@ -362,7 +432,7 @@ function render() {
       <button class="row-play" aria-label="Play">
         ${i === current && isPlaying ? 'Ⅱ' : '▶'}
       </button>
-      <button class="delete-track" type="button" data-delete-track="${i}" aria-label="Delete ${escapeHtml(t.name)}" title="Remove from library">✕</button>
+
     </li>
   `).join('');
 
@@ -386,11 +456,14 @@ function render() {
     removeFavoritesTools();
   } else if (activeTab === 'favorites') {
     removePlaylistTools();
-    showFavoritesTools();
+    if (selectionMode) showFavoritesTools();
+    else removeFavoritesTools();
   } else {
     removePlaylistTools();
     removeFavoritesTools();
   }
+  if (selectionMode) showSelectionTools();
+  else removeSelectionTools();
 }
 
 function showFavoritesTools() {
@@ -880,53 +953,50 @@ $('favorite').onclick = () => {
   render();
 };
 
+let trackPointerStartY = 0;
+$('tracks').addEventListener('pointerdown', e => {
+  const row = e.target.closest('[data-index]');
+  if (!row || e.target.closest('button,input')) return;
+  trackPressTriggered = false;
+  trackPointerStartY = e.clientY;
+  clearTimeout(trackPressTimer);
+  trackPressTimer = setTimeout(() => {
+    const index = Number(row.dataset.index);
+    if (!selectionMode) {
+      selectionMode = true;
+      selectedTracks.clear();
+    }
+    trackPressTriggered = true;
+    toggleTrackSelection(index);
+  }, 550);
+});
+$('tracks').addEventListener('pointermove', e => {
+  if (Math.abs(e.clientY - trackPointerStartY) > 12) clearTimeout(trackPressTimer);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+  $('tracks').addEventListener(type, () => clearTimeout(trackPressTimer));
+});
 $('tracks').onclick = e => {
-  const deleteButton = e.target.closest('[data-delete-track]');
-  if (deleteButton) {
-    e.preventDefault();
-    e.stopPropagation();
-    deleteLibraryTrack(Number(deleteButton.dataset.deleteTrack));
-    return;
-  }
-
   const checkbox = e.target.closest('[data-select]');
-
   if (checkbox) {
-    const id = tracks[
-      Number(checkbox.dataset.select)
-    ]?.id;
-
-    if (id) {
-      if (checkbox.checked) {
-        selectedTracks.add(id);
-      } else {
-        selectedTracks.delete(id);
-      }
-    }
-
-    const addButton = document.getElementById('addSelected');
-    if (addButton) {
-      addButton.textContent = `Add Selected (${selectedTracks.size})`;
-    }
-    const favoritesAddButton = document.getElementById('favoritesAddSelected');
-    if (favoritesAddButton) {
-      favoritesAddButton.textContent = `Add Selected (${selectedTracks.size})`;
-    }
-
+    e.preventDefault();
+    toggleTrackSelection(Number(checkbox.dataset.select));
     return;
   }
-
   const li = e.target.closest('[data-index]');
-
-  if (li) {
-    const index = Number(li.dataset.index);
-    if (Number.isInteger(index) && index >= 0) {
-      if (index === current) {
-        togglePlay();
-      } else {
-        playTrack(index);
-      }
-    }
+  if (!li) return;
+  const index = Number(li.dataset.index);
+  if (!Number.isInteger(index) || index < 0) return;
+  if (trackPressTriggered) {
+    trackPressTriggered = false;
+    return;
+  }
+  if (selectionMode) {
+    toggleTrackSelection(index);
+  } else if (index === current) {
+    togglePlay();
+  } else {
+    playTrack(index);
   }
 };
 
