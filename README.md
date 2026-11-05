@@ -21,3 +21,10 @@ A Capacitor HTML/CSS/JS music player starter. It uses a small local Capacitor iO
 
 ## Native plugin note
 The plugin is included as a local Capacitor iOS plugin. Capacitor sync registers its Swift source in the iOS project. If the iOS runner reports plugin discovery/build errors, inspect the generated `ios/App` project and adjust plugin registration for the installed Capacitor CLI version.
+
+## Manual playback resume
+The iOS music plugin stores the last played track ID and playback position in
+`UserDefaults`, while the app restores the matching track from its saved music
+library. On relaunch, the track is selected but playback remains paused until
+the user taps Play. This requires the same iOS app bundle identifier so an
+in-place app update retains its app data.
